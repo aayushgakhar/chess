@@ -39,7 +39,7 @@ func Grid(fen string) [8][8]string {
 			}
 			c += skip
 		}
-		grid[r] = row
+		grid[7-r] = row
 	}
 	return grid
 }

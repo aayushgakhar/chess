@@ -2,7 +2,6 @@ package game
 
 import (
 	"chess/myGame"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -10,15 +9,14 @@ import (
 	dt "github.com/dylhunn/dragontoothmg"
 )
 
-
-
 type Game struct {
-	board *dt.Board
-	moves []dt.Move
+	board      *dt.Board
+	moves      []dt.Move
 	pieceMoves []dt.Move
-	selected string
-	flipped bool
-	buffer string
+	selected   string
+	flipped    bool
+	buffer     string
+	message    string
 }
 
 func NewGame() *Game {
@@ -26,7 +24,7 @@ func NewGame() *Game {
 }
 
 func NewGameWithPosition(fen string) *Game {
-	g := Game{}
+	g := Game{flipped: false, message: "White to move"}
 	if !IsValidFen(fen) {
 		fen = dt.Startpos
 	}
@@ -43,9 +41,12 @@ func (g *Game) Init() tea.Cmd {
 func Cell(x, y int, flipped bool) string {
 	row := (y - 1) / 2
 	col := (x - 2) / 4
+	row = max(0, min(7, row))
+	col = max(0, min(7, col))
 	if flipped {
-		row = 7 - row
 		col = 7 - col
+	} else {
+		row = 7 - row
 	}
 	return myGame.CoordsToNotation(row, col)
 }
@@ -85,18 +86,71 @@ func (g *Game) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// 	g.selected = msg.From
 	// 	g.pieceMoves = moves.LegalSelected(g.moves, g.selected)
 	// 	return g.Select(msg.To)
-	// } 
+	// }
 
 	return g, nil
 }
 
+func (g *Game) setLegalSelected() {
+	LegalMoves := []dt.Move{}
+	if g.selected == "" {
+		g.pieceMoves = LegalMoves
+		return
+	}
+	for _, move := range g.moves {
+		if strings.HasPrefix(move.String(), g.selected) {
+			LegalMoves = append(LegalMoves, move)
+		}
+	}
+	g.pieceMoves = LegalMoves
+}
+
+func (g *Game) isLegal(moves []dt.Move,destination string)bool {
+	for _,move := range moves {
+		if strings.HasSuffix(move.String(), destination){
+			return true
+		}
+		if move.Promote() > 1 && strings.HasSuffix(move.String(), destination+"q"){
+			return true
+		}
+	}
+	return false
+}
+
 func (g *Game) Select(square string) (tea.Model, tea.Cmd) {
-	fmt.Println("Selecting", square)
+	if g.selected != "" {
+		from := g.selected
+		to := square
+		for _, move := range g.pieceMoves {
+			if move.String() == from+to || move.Promote() > 1 && move.String() == from+to+"q" {
+				g.board.Apply(move)
+				g.moves = g.board.GenerateLegalMoves()
+				check := g.board.OurKingInCheck()
+				checkmate := check && len(g.moves) == 0
+				if checkmate {
+					g.message = "Checkmate!"
+				} else if check {
+					g.message = "Check!"
+				} else if g.board.Wtomove {
+					g.message = "White to move"
+				} else {
+					g.message = "Black to move"
+				}
+				g.Deselect()
+				return g, nil
+			}
+		}
+		g.selected = square
+	} else {
+		g.selected = square
+	}
+	g.setLegalSelected()
 	return g, nil
 }
 
 func (g *Game) Deselect() (tea.Model, tea.Cmd) {
-	fmt.Println("Deselecting")
+	g.selected = ""
+	g.pieceMoves = []dt.Move{}
 	return g, nil
 }
 
@@ -107,7 +161,6 @@ const (
 	Sep    = " │"
 )
 
-
 func (g *Game) View() string {
 	rows := []int{7, 6, 5, 4, 3, 2, 1, 0}
 	cols := []int{0, 1, 2, 3, 4, 5, 6, 7}
@@ -115,51 +168,52 @@ func (g *Game) View() string {
 		rows = []int{0, 1, 2, 3, 4, 5, 6, 7}
 		cols = []int{7, 6, 5, 4, 3, 2, 1, 0}
 	}
+	grid := Grid(g.board.ToFen())
 	var s strings.Builder
-	// fmt.Println(Top)
 	s.WriteString(Top)
 	s.WriteString("\n")
+	whiteTurn := g.board.Wtomove
 	for ind, i := range rows {
-		// fmt.Print(i + 1)
 		s.WriteString(strconv.Itoa(i + 1))
-		// fmt.Print(Sep)
 		s.WriteString(Sep)
 		for _, j := range cols {
-			// if g.Cells[i][j].Piece != nil {
-			// 	// fmt.Printf(" %s%s", b.Cells[i][j].Piece.Icon, Sep)
-			// 	s.WriteString(" ")
-			// 	s.WriteString(b.Cells[i][j].Piece.Icon)
-			// 	s.WriteString(Sep)
-			// } else {
-				// fmt.Printf(" .%s", Sep)
-				if j>-1{}
-				s.WriteString(" .")
-				s.WriteString(Sep)
-			// }
+			current := myGame.CoordsToNotation(i, j)
+			p := Piece(grid[i][j])
+			display := p.Display()
+			correct := p.IsWhite() == whiteTurn
+
+			if current == g.selected {
+				if correct {
+					display = Cyan(display)
+				}else{
+					display = Red(display)
+				}
+			}
+			if g.isLegal(g.pieceMoves,current){
+				if p.IsEmpty(){
+					display = "."
+				}
+				display = Magenta(display)
+			}
+			s.WriteString(" ")
+			s.WriteString(display)
+			s.WriteString(Sep)
 		}
-		// fmt.Println()
 		s.WriteString("\n")
 		if ind < 7 {
-			// fmt.Println(RowSep)
 			s.WriteString(RowSep)
 			s.WriteString("\n")
 		}
 	}
-	// fmt.Println(Bottom)
 	s.WriteString(Bottom)
 	s.WriteString("\n")
-	// fmt.Print("   ")
 	s.WriteString("   ")
 	for _, i := range cols {
-		// fmt.Printf(" %c  ", 'a'+i)
 		s.WriteString(" ")
-		s.WriteString(string('a'+i))
+		s.WriteString(string(rune('a' + i)))
 		s.WriteString("  ")
 	}
-	// fmt.Println()
 	s.WriteString("\n")
+	s.WriteString(g.message)
 	return s.String()
 }
-
-
-
