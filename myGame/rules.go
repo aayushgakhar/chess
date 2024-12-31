@@ -115,6 +115,23 @@ func (b *Board) bishopMoves(p *Piece) []Move {
 
 func (b *Board) rookMoves(p *Piece) []Move {
 	moves := []Move{}
+	for _, move := range [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}} {
+		for {
+			newRow := p.Cell.Row + move[0]
+			newColumn := p.Cell.Column + move[1]
+			if !inBoard(newRow, newColumn) {
+				break
+			}
+			newCell := b.Cells[newRow][newColumn]
+			if newCell.Piece != nil {
+				if newCell.Piece.Color != p.Color {
+					moves = append(moves, Move{Piece: *p, From: p.Cell, To: &newCell})
+				}
+				break
+			}
+			moves = append(moves, Move{Piece: *p, From: p.Cell, To: &newCell})
+		}
+	}
 	// move vertically or horizontally
 	// can't jump over pieces
 	return moves
@@ -122,6 +139,9 @@ func (b *Board) rookMoves(p *Piece) []Move {
 
 func (b *Board) queenMoves(p *Piece) []Move {
 	moves := []Move{}
+	// can move like a bishop or a rook
+	moves = append(moves, b.bishopMoves(p)...)
+	moves = append(moves, b.rookMoves(p)...)
 	// move vertically, horizontally, or diagonally
 	// can't jump over pieces
 	return moves
@@ -129,6 +149,23 @@ func (b *Board) queenMoves(p *Piece) []Move {
 
 func (b *Board) kingMoves(p *Piece) []Move {
 	moves := []Move{}
+	possibleMoves := [][]int{
+		{-1, -1},
+		{-1, 0},
+		{-1, 1},
+		{0, -1},
+		{0, 1},
+		{1, -1},
+		{1, 0},
+		{1, 1},
+	}
+	for _, move := range possibleMoves {
+		newRow := p.Cell.Row + move[0]
+		newColumn := p.Cell.Column + move[1]
+		if inBoard(newRow, newColumn) && canMoveTo(&b.Cells[newRow][newColumn], p.Color) {
+			moves = append(moves, Move{Piece: *p, From: p.Cell, To: &b.Cells[newRow][newColumn]})
+		}
+	}
 	// move one space in any direction
 	// can't move into check
 	return moves
